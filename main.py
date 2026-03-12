@@ -1,6 +1,6 @@
 import streamlit as st
 import ezdxf
-from io import BytesIO
+import io
 
 # Configuración de la página
 st.set_page_config(page_title="DrillPath AI", page_icon="🏗️", layout="wide")
@@ -62,6 +62,7 @@ st.download_button(
 )
 
 st.info("Próxima actualización: Integración de IA para lectura de informes geotécnicos PDF.")
+
 
 
 
