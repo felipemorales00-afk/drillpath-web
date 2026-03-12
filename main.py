@@ -36,13 +36,16 @@ with col3:
 def create_dxf():
     doc = ezdxf.new('R2010')
     msp = doc.modelspace()
-    msp.add_lwpolyline([(0, 0), (longitud, 0)], dxfattribs={'color': 3}) # Terreno
-    msp.add_spline([(0, 0), (longitud/2, -prof_max), (longitud, 0)], dxfattribs={'color': 1}) # Perfil
+    msp.add_lwpolyline([(0, 0), (longitud, 0)], dxfattribs={'color': 3})
+    msp.add_spline([(0, 0), (longitud/2, -prof_max), (longitud, 0)], dxfattribs={'color': 1})
     
-    out = BytesIO()
-    doc.write(out)
+    # Usamos un buffer binario
+    out = io.BytesIO()
+    # Escribimos explícitamente en formato binario
+    doc.write(out, fmt="bin")
+    # Movemos el puntero al principio para que Streamlit pueda leerlo
     out.seek(0)
-    return out
+    return out 
 
     
 
@@ -59,6 +62,7 @@ st.download_button(
 )
 
 st.info("Próxima actualización: Integración de IA para lectura de informes geotécnicos PDF.")
+
 
 
 
