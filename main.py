@@ -39,7 +39,7 @@ def create_dxf():
     msp.add_lwpolyline([(0, 0), (longitud, 0)], dxfattribs={'color': 3}) # Terreno
     msp.add_spline([(0, 0), (longitud/2, -prof_max), (longitud, 0)], dxfattribs={'color': 1}) # Perfil
     
-out = BytesIO()
+    out = BytesIO()
     doc.write(out)
     out.seek(0)
     return out
@@ -59,5 +59,6 @@ st.download_button(
 )
 
 st.info("Próxima actualización: Integración de IA para lectura de informes geotécnicos PDF.")
+
 
 
