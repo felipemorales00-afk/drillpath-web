@@ -56,3 +56,4 @@ st.download_button(
 )
 
 st.info("Próxima actualización: Integración de IA para lectura de informes geotécnicos PDF.")
+
