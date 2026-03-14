@@ -94,13 +94,11 @@ if archivo_subido:
             df = pd.read_csv(archivo_subido, sep=None, engine='python')
         
         if df.shape[1] >= 2:
-            # Limpieza de datos
             x_raw = pd.to_numeric(df.iloc[:, 0].astype(str).str.replace(',', '.'), errors='coerce')
             y_raw = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(',', '.'), errors='coerce')
             validos = ~(x_raw.isna() | y_raw.isna())
             x_raw, y_raw = x_raw[validos], y_raw[validos]
 
-            # Normalización
             puntos_topo = list(zip(x_raw - x_raw.iloc[0], y_raw - y_raw.iloc[0]))
             
             archivo_dxf = create_dxf(puntos_topo, prof_diseno)
@@ -118,6 +116,3 @@ if archivo_subido:
         st.error(f"Error: {e}")
 else:
     st.info("Sube un archivo de topografía para proyectar la trayectoria.")
-
-
-
