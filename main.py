@@ -67,12 +67,10 @@ def create_dxf(puntos_topo, prof_perforacion):
     msp.add_lwpolyline(puntos_topo, dxfattribs={'color': 1})
     
     # 2. Dibujar la CURVA DE PERFORACIÓN (Color Cian - 4)
-    # Puntos clave: inicio, punto más bajo (profundidad) y fin
     x_inicio, y_inicio = puntos_topo[0]
     x_fin, y_fin = puntos_topo[-1]
     
     punto_medio_x = (x_inicio + x_fin) / 2
-    # El punto más bajo está a 'prof_perforacion' metros por debajo del punto más bajo del terreno
     y_min_terreno = min([p[1] for p in puntos_topo])
     punto_bajo_y = y_min_terreno - prof_perforacion
     
@@ -81,7 +79,6 @@ def create_dxf(puntos_topo, prof_perforacion):
         (punto_medio_x, punto_bajo_y),
         (x_fin, y_fin)
     ]
-    # Usamos spline para que sea una curva suave
     msp.add_spline(puntos_perforacion, dxfattribs={'color': 4})
     
     out = io.BytesIO()
@@ -91,23 +88,21 @@ def create_dxf(puntos_topo, prof_perforacion):
 
 if archivo_subido:
     try:
-        # Detección de separador automática para CSV
         if archivo_subido.name.endswith('.xlsx'):
             df = pd.read_excel(archivo_subido)
         else:
             df = pd.read_csv(archivo_subido, sep=None, engine='python')
         
         if df.shape[1] >= 2:
-            # Limpieza y conversión a números
+            # Limpieza de datos
             x_raw = pd.to_numeric(df.iloc[:, 0].astype(str).str.replace(',', '.'), errors='coerce')
             y_raw = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(',', '.'), errors='coerce')
             validos = ~(x_raw.isna() | y_raw.isna())
             x_raw, y_raw = x_raw[validos], y_raw[validos]
 
-            # Normalización (empezar en 0,0)
+            # Normalización
             puntos_topo = list(zip(x_raw - x_raw.iloc[0], y_raw - y_raw.iloc[0]))
             
-            # Crear archivo DXF
             archivo_dxf = create_dxf(puntos_topo, prof_diseno)
             
             st.download_button(
@@ -116,18 +111,13 @@ if archivo_subido:
                 file_name=f"{proyecto}_diseno_final.dxf", 
                 mime="application/dxf"
             )
-            
-            st.success("¡Plano generado! Incluye el terreno real y la curva de perforación.")
-            st.write("Vista previa de los datos de topografía:")
-            st.dataframe(df.head())
+            st.success("¡Plano generado correctamente!")
         else:
-            st.error("El archivo no tiene el formato correcto (se necesitan 2 columnas).")
+            st.error("Formato incorrecto: se necesitan 2 columnas.")
     except Exception as e:
-        st.error(f"Ocurrió un error al procesar el archivo: {e}")
+        st.error(f"Error: {e}")
 else:
-    st.info("Sube un archivo de topografía para proyectar la trayectoria de perforación.")
-
-
+    st.info("Sube un archivo de topografía para proyectar la trayectoria.")
 
 
 
