@@ -63,10 +63,10 @@ def create_dxf(puntos_topo, prof_perforacion):
     doc = ezdxf.new('R2010')
     msp = doc.modelspace()
     
-    # 1. Dibujar el TERRENO (Color Rojo - 1)
+    # 1. Dibujar el TERRENO (Color Rojo)
     msp.add_lwpolyline(puntos_topo, dxfattribs={'color': 1})
     
-    # 2. Dibujar la CURVA DE PERFORACIÓN (Color Cian - 4)
+    # 2. Dibujar la CURVA DE PERFORACIÓN (Color Cian)
     x_inicio, y_inicio = puntos_topo[0]
     x_fin, y_fin = puntos_topo[-1]
     
