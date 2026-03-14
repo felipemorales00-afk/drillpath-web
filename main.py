@@ -1,4 +1,3 @@
-
 import streamlit as st
 import ezdxf
 import io
@@ -7,6 +6,13 @@ import pandas as pd
 
 # Configuración de la página
 st.set_page_config(page_title="DrillPath AI", page_icon="🏗️", layout="wide")
+
+# Mostrar logo (asegúrate de que LOGO.png esté en la raíz del repositorio)
+try:
+    st.image("LOGO.png", width=250)
+except:
+    pass
+
 st.title("🏗️ DrillPath AI: Ingeniería HDD de Precisión")
 
 # --- 1. ENTRADA DE DATOS (SIDEBAR) ---
@@ -21,23 +27,27 @@ with st.sidebar:
     sg_lodo = st.slider("Densidad Lodo (SG)", 1.0, 1.8, 1.2)
     densidad_suelo = st.number_input("Densidad Suelo (g/cm³)", value=1.8)
 
-# --- 2. MOTOR DE CÁLCULO ---
+# --- 2. MOTOR DE CÁLCULO (OPERACIONES EXACTAS) ---
 def ejecutar_calculos_hdd(L, D_tubo, D_reamer, prof, suelo, sg, dens_suelo):
     D_tubo_m = D_tubo / 1000
     rop_base = {"Arcillas": 8.0, "Arenas": 5.0, "Gravas": 3.0}
     rop = rop_base.get(suelo, 5.0) / (dens_suelo / 1.5)
     factor_lodos = 1.0 + (1 / rop)
+    
     vol_interno = math.pi * (D_tubo_m/2)**2 * L
     vol_anular = (math.pi * (D_reamer/2)**2 * L) - vol_interno
     vol_detritos = vol_anular * factor_lodos
+    
     fuerza_bf = (math.pi * (D_tubo_m/2)**2) * L * sg * 1000
-    peso_tubo = L * 50
+    peso_tubo = L * 50 
     flotabilidad_neta = fuerza_bf - peso_tubo
+    
     k_valores = {"Arcillas": 20, "Arenas": 14, "Gravas": 24}
     pullback = (L * D_tubo_m * k_valores.get(suelo, 18)) / 100
-    map_presion = prof * 0.15
+    map_presion = prof * 0.15 
     caudal = (D_reamer * 1000) * 0.8
-    return locals()
+    
+    return {"pullback": pullback, "vol_detritos": vol_detritos, "flotabilidad_neta": flotabilidad_neta, "map_presion": map_presion, "caudal": caudal}
 
 res = ejecutar_calculos_hdd(longitud_nominal, diametro_tubo_mm, diametro_reamer, prof_diseno, suelo, sg_lodo, densidad_suelo)
 
@@ -48,8 +58,9 @@ c1.metric("Pullback", f"{res['pullback']:.2f} Tn")
 c2.metric("Vol. Detritos", f"{res['vol_detritos']:.2f} m³")
 c3.metric("Flotabilidad Neta", f"{res['flotabilidad_neta']:.0f} kg")
 c4.metric("MAP (Límite)", f"{res['map_presion']:.2f} Bar")
+st.write(f"**Caudal Estimado:** {res['caudal']:.2f} L/min")
 
-# --- 4. FUNCIÓN DXF ---
+# --- 4. FUNCIÓN DXF (TERRENO Y CURVA) ---
 def create_dxf(puntos_topo, prof_perforacion):
     doc = ezdxf.new('R2010')
     msp = doc.modelspace()
@@ -66,38 +77,21 @@ def create_dxf(puntos_topo, prof_perforacion):
     out.seek(0)
     return out
 
-# --- 5. CARGA DE TOPOGRAFÍA Y GENERACIÓN DE DXF ---
+# --- 5. CARGA DE ARCHIVO ---
 st.divider()
-st.subheader("💾 Entregables y Perfil Real")
-
 archivo_subido = st.file_uploader("Cargar perfil topográfico (Excel o CSV)", type=["xlsx", "csv"])
 
 if archivo_subido:
     try:
-        # Si es Excel, lo lee directo
-        if archivo_subido.name.endswith('.xlsx'):
-            df = pd.read_excel(archivo_subido)
-        else:
-            # Si es CSV, intentamos detectar el separador automáticamente
-            # sep=None junto con engine='python' hace que pandas adivine si es ; o ,
-            df = pd.read_csv(archivo_subido, sep=None, engine='python')
-        
-        # Validar si al leerlo se crearon al menos 2 columnas
+        df = pd.read_excel(archivo_subido) if archivo_subido.name.endswith('.xlsx') else pd.read_csv(archivo_subido, sep=None, engine='python')
         if df.shape[1] >= 2:
-            # Seleccionamos las columnas 0 y 1 explícitamente
             x_raw = pd.to_numeric(df.iloc[:, 0].astype(str).str.replace(',', '.'), errors='coerce')
             y_raw = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(',', '.'), errors='coerce')
-            
-            # Limpiamos filas vacías
-            df_final = pd.DataFrame({'x': x_raw, 'y': y_raw}).dropna()
-            
-            puntos_topo = list(zip(df_final['x'] - df_final['x'].iloc[0], df_final['y'] - df_final['y'].iloc[0]))
-            
-            archivo_dxf = create_dxf(puntos_topo, prof_diseno)
-            
-            st.download_button("📥 Descargar Perfil + Curva (.DXF)", data=archivo_dxf, file_name=f"{proyecto}_final.dxf", mime="application/dxf")
-            st.success("¡Plano generado correctamente!")
+            pts = list(zip(x_raw - x_raw.iloc[0], y_raw - y_raw.iloc[0]))
+            archivo_dxf = create_dxf(pts, prof_diseno)
+            st.download_button("📥 Descargar Perfil + Curva (.DXF)", data=archivo_dxf, file_name="diseno_final.dxf", mime="application/dxf")
+            st.success("¡Plano generado!")
         else:
-            st.error(f"Error: El archivo tiene {df.shape[1]} columna(s) detectadas. Asegúrate de que el CSV esté bien separado.")
+            st.error("El archivo necesita 2 columnas.")
     except Exception as e:
         st.error(f"Error procesando el archivo: {e}")
