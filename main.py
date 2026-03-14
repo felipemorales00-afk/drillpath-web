@@ -13,10 +13,10 @@ st.title("🏗️ DrillPath AI: Ingeniería HDD de Precisión")
 with st.sidebar:
     st.header("Parámetros del Proyecto")
     proyecto = st.text_input("Nombre del Proyecto", "Cruce Río Ebro")
-    longitud = st.number_input("Longitud del tramo (m)", value=352.68)
+    longitud_nominal = st.number_input("Longitud teórica (m)", value=352.68)
     diametro_tubo_mm = st.number_input("Diámetro Tubería (mm)", value=355.0)
     diametro_reamer = st.number_input("Diámetro Escariador (m)", value=0.5)
-    prof_max = st.number_input("Profundidad Máxima (m)", value=5.0)
+    prof_diseno = st.number_input("Profundidad de Perforación (m)", value=15.0)
     suelo = st.selectbox("Tipo de Suelo", ["Arcillas", "Arenas", "Gravas"])
     sg_lodo = st.slider("Densidad Lodo (SG)", 1.0, 1.8, 1.2)
     densidad_suelo = st.number_input("Densidad Suelo (g/cm³)", value=1.8)
@@ -43,7 +43,7 @@ def ejecutar_calculos_hdd(L, D_tubo, D_reamer, prof, suelo, sg, dens_suelo):
     
     return locals()
 
-res = ejecutar_calculos_hdd(longitud, diametro_tubo_mm, diametro_reamer, prof_max, suelo, sg_lodo, densidad_suelo)
+res = ejecutar_calculos_hdd(longitud_nominal, diametro_tubo_mm, diametro_reamer, prof_diseno, suelo, sg_lodo, densidad_suelo)
 
 # --- 3. INTERFAZ DE RESULTADOS ---
 st.subheader("📊 Análisis de Ingeniería HDD")
@@ -53,16 +53,37 @@ c2.metric("Vol. Detritos", f"{res['vol_detritos']:.2f} m³")
 c3.metric("Flotabilidad Neta", f"{res['flotabilidad_neta']:.0f} kg")
 c4.metric("MAP (Límite)", f"{res['map_presion']:.2f} Bar")
 
-# --- 4. CARGA DE TOPOGRAFÍA Y DXF ---
+# --- 4. CARGA DE TOPOGRAFÍA Y GENERACIÓN DE DXF ---
 st.divider()
 st.subheader("💾 Entregables y Perfil Real")
 
 archivo_subido = st.file_uploader("Cargar perfil topográfico (Excel o CSV)", type=["xlsx", "csv"])
 
-def create_dxf(puntos):
+def create_dxf(puntos_topo, prof_perforacion):
     doc = ezdxf.new('R2010')
     msp = doc.modelspace()
-    msp.add_lwpolyline(puntos, dxfattribs={'color': 1})
+    
+    # 1. Dibujar el TERRENO (Color Rojo - 1)
+    msp.add_lwpolyline(puntos_topo, dxfattribs={'color': 1})
+    
+    # 2. Dibujar la CURVA DE PERFORACIÓN (Color Cian - 4)
+    # Puntos clave: inicio, punto más bajo (profundidad) y fin
+    x_inicio, y_inicio = puntos_topo[0]
+    x_fin, y_fin = puntos_topo[-1]
+    
+    punto_medio_x = (x_inicio + x_fin) / 2
+    # El punto más bajo está a 'prof_perforacion' metros por debajo del punto más bajo del terreno
+    y_min_terreno = min([p[1] for p in puntos_topo])
+    punto_bajo_y = y_min_terreno - prof_perforacion
+    
+    puntos_perforacion = [
+        (x_inicio, y_inicio),
+        (punto_medio_x, punto_bajo_y),
+        (x_fin, y_fin)
+    ]
+    # Usamos spline para que sea una curva suave
+    msp.add_spline(puntos_perforacion, dxfattribs={'color': 4})
+    
     out = io.BytesIO()
     doc.write(out, fmt="bin")
     out.seek(0)
@@ -70,43 +91,41 @@ def create_dxf(puntos):
 
 if archivo_subido:
     try:
+        # Detección de separador automática para CSV
         if archivo_subido.name.endswith('.xlsx'):
             df = pd.read_excel(archivo_subido)
         else:
-            # Forzamos separador ';' porque es lo que detectamos en tu archivo
-            df = pd.read_csv(archivo_subido, sep=';', engine='python')
+            df = pd.read_csv(archivo_subido, sep=None, engine='python')
         
-        # Si el archivo leyó solo una columna, re-intentamos con coma
-        if df.shape[1] < 2:
-            archivo_subido.seek(0)
-            df = pd.read_csv(archivo_subido, sep=',', engine='python')
-
         if df.shape[1] >= 2:
-            st.success("¡Archivo cargado correctamente!")
-            
-            # Limpieza de datos (por si hay comas como decimales)
+            # Limpieza y conversión a números
             x_raw = pd.to_numeric(df.iloc[:, 0].astype(str).str.replace(',', '.'), errors='coerce')
             y_raw = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(',', '.'), errors='coerce')
-            
-            # Quitar filas con errores (NaN)
             validos = ~(x_raw.isna() | y_raw.isna())
             x_raw, y_raw = x_raw[validos], y_raw[validos]
 
-            # Normalización para AutoCAD (Restamos el primer punto para empezar en 0,0)
+            # Normalización (empezar en 0,0)
             puntos_topo = list(zip(x_raw - x_raw.iloc[0], y_raw - y_raw.iloc[0]))
             
-            archivo_dxf = create_dxf(puntos_topo)
-            st.download_button("📥 Descargar Perfil Real (.DXF)", data=archivo_dxf, file_name=f"{proyecto}_perfil.dxf", mime="application/dxf")
+            # Crear archivo DXF
+            archivo_dxf = create_dxf(puntos_topo, prof_diseno)
             
-            st.write("Vista previa de los datos procesados:")
+            st.download_button(
+                label="📥 Descargar Perfil + Curva (.DXF)", 
+                data=archivo_dxf, 
+                file_name=f"{proyecto}_diseno_final.dxf", 
+                mime="application/dxf"
+            )
+            
+            st.success("¡Plano generado! Incluye el terreno real y la curva de perforación.")
+            st.write("Vista previa de los datos de topografía:")
             st.dataframe(df.head())
         else:
-            st.error("El archivo no tiene suficientes columnas. Revisa que los datos estén separados por comas o punto y coma.")
-            
+            st.error("El archivo no tiene el formato correcto (se necesitan 2 columnas).")
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Ocurrió un error al procesar el archivo: {e}")
 else:
-    st.info("Sube un archivo de topografía para generar el perfil real.")
+    st.info("Sube un archivo de topografía para proyectar la trayectoria de perforación.")
 
 
 
