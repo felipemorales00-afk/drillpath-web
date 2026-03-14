@@ -41,7 +41,7 @@ def ejecutar_calculos_hdd(L, D_tubo, D_reamer, prof, suelo, sg, dens_suelo):
     map_presion = prof * 0.15 
     caudal = (D_reamer * 1000) * 0.8
     
-    return locals()
+    return {"pullback": pullback, "vol_detritos": vol_detritos, "flotabilidad_neta": flotabilidad_neta, "map_presion": map_presion, "caudal": caudal}
 
 res = ejecutar_calculos_hdd(longitud_nominal, diametro_tubo_mm, diametro_reamer, prof_diseno, suelo, sg_lodo, densidad_suelo)
 
@@ -52,13 +52,9 @@ c1.metric("Pullback", f"{res['pullback']:.2f} Tn")
 c2.metric("Vol. Detritos", f"{res['vol_detritos']:.2f} m³")
 c3.metric("Flotabilidad Neta", f"{res['flotabilidad_neta']:.0f} kg")
 c4.metric("MAP (Límite)", f"{res['map_presion']:.2f} Bar")
+st.write(f"**Caudal Estimado:** {res['caudal']:.2f} L/min")
 
-# --- 4. CARGA DE TOPOGRAFÍA Y GENERACIÓN DE DXF ---
-st.divider()
-st.subheader("💾 Entregables y Perfil Real")
-
-archivo_subido = st.file_uploader("Cargar perfil topográfico (Excel o CSV)", type=["xlsx", "csv"])
-
+# --- 4. FUNCIÓN GENERACIÓN DXF (TERRENO Y CURVA) ---
 def create_dxf(puntos_topo, prof_perforacion):
     doc = ezdxf.new('R2010')
     msp = doc.modelspace()
@@ -67,21 +63,13 @@ def create_dxf(puntos_topo, prof_perforacion):
     msp.add_lwpolyline(puntos_topo, dxfattribs={'color': 1})
     
     # 2. Dibujar la CURVA DE PERFORACIÓN (Color Cian - 4)
-    # Puntos clave: inicio, punto más bajo (profundidad) y fin
     x_inicio, y_inicio = puntos_topo[0]
     x_fin, y_fin = puntos_topo[-1]
-    
     punto_medio_x = (x_inicio + x_fin) / 2
-    # El punto más bajo está a 'prof_perforacion' metros por debajo del punto más bajo del terreno
     y_min_terreno = min([p[1] for p in puntos_topo])
     punto_bajo_y = y_min_terreno - prof_perforacion
     
-    puntos_perforacion = [
-        (x_inicio, y_inicio),
-        (punto_medio_x, punto_bajo_y),
-        (x_fin, y_fin)
-    ]
-    # Usamos spline para que sea una curva suave
+    puntos_perforacion = [(x_inicio, y_inicio), (punto_medio_x, punto_bajo_y), (x_fin, y_fin)]
     msp.add_spline(puntos_perforacion, dxfattribs={'color': 4})
     
     out = io.BytesIO()
@@ -89,40 +77,32 @@ def create_dxf(puntos_topo, prof_perforacion):
     out.seek(0)
     return out
 
+
+
+# --- 5. CARGA DE TOPOGRAFÍA Y GENERACIÓN DE DXF ---
+st.divider()
+st.subheader("💾 Entregables y Perfil Real")
+archivo_subido = st.file_uploader("Cargar perfil topográfico (Excel o CSV)", type=["xlsx", "csv"])
+
 if archivo_subido:
     try:
-        # Detección de separador automática para CSV
         if archivo_subido.name.endswith('.xlsx'):
             df = pd.read_excel(archivo_subido)
         else:
             df = pd.read_csv(archivo_subido, sep=None, engine='python')
         
         if df.shape[1] >= 2:
-            # Limpieza y conversión a números
             x_raw = pd.to_numeric(df.iloc[:, 0].astype(str).str.replace(',', '.'), errors='coerce')
-            y_raw = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(',', '.'), errors='coerce')
+            y_raw = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(', '.'), errors='coerce')
             validos = ~(x_raw.isna() | y_raw.isna())
             x_raw, y_raw = x_raw[validos], y_raw[validos]
-
-            # Normalización (empezar en 0,0)
-            puntos_topo = list(zip(x_raw - x_raw.iloc[0], y_raw - y_raw.iloc[0]))
             
-            # Crear archivo DXF
+            puntos_topo = list(zip(x_raw - x_raw.iloc[0], y_raw - y_raw.iloc[0]))
             archivo_dxf = create_dxf(puntos_topo, prof_diseno)
             
-            st.download_button(
-                label="📥 Descargar Perfil + Curva (.DXF)", 
-                data=archivo_dxf, 
-                file_name=f"{proyecto}_diseno_final.dxf", 
-                mime="application/dxf"
-            )
-            
-            st.success("¡Plano generado! Incluye el terreno real y la curva de perforación.")
-            st.write("Vista previa de los datos de topografía:")
-            st.dataframe(df.head())
+            st.download_button("📥 Descargar Perfil + Curva (.DXF)", data=archivo_dxf, file_name=f"{proyecto}_diseno_final.dxf", mime="application/dxf")
+            st.success("¡Plano generado correctamente!")
         else:
-            st.error("El archivo no tiene el formato correcto (se necesitan 2 columnas).")
+            st.error("El archivo necesita 2 columnas.")
     except Exception as e:
-        st.error(f"Ocurrió un error al procesar el archivo: {e}")
-else:
-    st.info("Sube un archivo de topografía para proyectar la trayectoria de perforación.")
+        st.error(f"Error: {e}")
