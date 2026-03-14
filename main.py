@@ -66,22 +66,38 @@ def create_dxf(puntos_topo, prof_perforacion):
     out.seek(0)
     return out
 
-# --- 5. CARGA DE TOPOGRAFÍA ---
+# --- 5. CARGA DE TOPOGRAFÍA Y GENERACIÓN DE DXF ---
 st.divider()
+st.subheader("💾 Entregables y Perfil Real")
+
 archivo_subido = st.file_uploader("Cargar perfil topográfico (Excel o CSV)", type=["xlsx", "csv"])
 
 if archivo_subido:
     try:
-        # Se añade header=None para evitar que el nombre de columnas falle si el CSV no tiene cabecera
-        df = pd.read_csv(archivo_subido) if archivo_subido.name.endswith('.csv') else pd.read_excel(archivo_subido)
-        # Limpieza de datos asegurando que tomamos la columna 0 y 1
-        x_raw = pd.to_numeric(df.iloc[:, 0].astype(str).str.replace(',', '.'), errors='coerce')
-        y_raw = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(',', '.'), errors='coerce')
-        df_clean = pd.DataFrame({'x': x_raw, 'y': y_raw}).dropna()
-        pts = list(zip(df_clean['x'] - df_clean['x'].iloc[0], df_clean['y'] - df_clean['y'].iloc[0]))
+        # Si es Excel, lo lee directo
+        if archivo_subido.name.endswith('.xlsx'):
+            df = pd.read_excel(archivo_subido)
+        else:
+            # Si es CSV, intentamos detectar el separador automáticamente
+            # sep=None junto con engine='python' hace que pandas adivine si es ; o ,
+            df = pd.read_csv(archivo_subido, sep=None, engine='python')
         
-        archivo_dxf = create_dxf(pts, prof_diseno)
-        st.download_button("📥 Descargar DXF", data=archivo_dxf, file_name="perfil_diseno.dxf")
-        st.success("Plano generado.")
+        # Validar si al leerlo se crearon al menos 2 columnas
+        if df.shape[1] >= 2:
+            # Seleccionamos las columnas 0 y 1 explícitamente
+            x_raw = pd.to_numeric(df.iloc[:, 0].astype(str).str.replace(',', '.'), errors='coerce')
+            y_raw = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(',', '.'), errors='coerce')
+            
+            # Limpiamos filas vacías
+            df_final = pd.DataFrame({'x': x_raw, 'y': y_raw}).dropna()
+            
+            puntos_topo = list(zip(df_final['x'] - df_final['x'].iloc[0], df_final['y'] - df_final['y'].iloc[0]))
+            
+            archivo_dxf = create_dxf(puntos_topo, prof_diseno)
+            
+            st.download_button("📥 Descargar Perfil + Curva (.DXF)", data=archivo_dxf, file_name=f"{proyecto}_final.dxf", mime="application/dxf")
+            st.success("¡Plano generado correctamente!")
+        else:
+            st.error(f"Error: El archivo tiene {df.shape[1]} columna(s) detectadas. Asegúrate de que el CSV esté bien separado.")
     except Exception as e:
         st.error(f"Error procesando el archivo: {e}")
