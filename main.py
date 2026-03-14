@@ -1,4 +1,3 @@
-
 import streamlit as st
 import ezdxf
 import io
@@ -85,20 +84,17 @@ archivo = st.file_uploader("Sube tu archivo TOPO ADIF.csv", type=["csv", "xlsx"]
 
 if archivo:
     try:
-        # Leer archivo con detección de separador
         if archivo.name.endswith('.xlsx'):
             df = pd.read_excel(archivo)
         else:
             df = pd.read_csv(archivo, sep=None, engine='python')
         
         if df.shape[1] >= 2:
-            # Convertir coordenadas y limpiar comas decimales
             x = pd.to_numeric(df.iloc[:, 0].astype(str).str.replace(',', '.'), errors='coerce')
             y = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(',', '.'), errors='coerce')
             validos = ~(x.isna() | y.isna())
             x, y = x[validos], y[validos]
 
-            # Normalizar para que empiece en 0,0
             puntos = list(zip(x - x.iloc[0], y - y.iloc[0]))
             
             dxf_data = generar_dxf(puntos, prof_diseno)
